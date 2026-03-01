@@ -7,6 +7,9 @@ import csv
 from datetime import datetime
 from scipy.optimize import minimize
 
+# Capture the exact directory where THIS Python script is located
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # ==========================================
 # --- 1. Hooking into the ASAM XIL API ---
 # ==========================================
@@ -17,22 +20,83 @@ from ASAM.XIL.Implementation.Testbench import TestbenchFactory
 from ASAM.XIL.Interfaces.Testbench.MAPort.Enum.MAPortState import MAPortState
 
 PROJECT_DIR  = r"C:\CM_Projects\FS_LTS_2025_v1"
-VEHICLE_FILE = r"C:\CM_Projects\FS_LTS_2025_v1\Data\Vehicle\Baseline_Vehicles\Aero_4EM.car"
 TESTRUN_FILE = "FS_Sprint_2025" 
 
+# List of all baseline vehicles
+BASELINE_VEHICLES = [
+    r"C:\CM_Projects\FS_LTS_2025_v1\Data\Vehicle\Baseline_Vehicles\Aero_1EM_Locked.car",
+    r"C:\CM_Projects\FS_LTS_2025_v1\Data\Vehicle\Baseline_Vehicles\Aero_1EM_Open.car",
+    r"C:\CM_Projects\FS_LTS_2025_v1\Data\Vehicle\Baseline_Vehicles\Aero_1EM_Torsen.car",
+    r"C:\CM_Projects\FS_LTS_2025_v1\Data\Vehicle\Baseline_Vehicles\Aero_4EM.car",
+    r"C:\CM_Projects\FS_LTS_2025_v1\Data\Vehicle\Baseline_Vehicles\Aero_NA_Locked.car",
+    r"C:\CM_Projects\FS_LTS_2025_v1\Data\Vehicle\Baseline_Vehicles\Aero_NA_Open.car",
+    r"C:\CM_Projects\FS_LTS_2025_v1\Data\Vehicle\Baseline_Vehicles\Aero_NA_Torsen.car",
+    r"C:\CM_Projects\FS_LTS_2025_v1\Data\Vehicle\Baseline_Vehicles\Aero_Turbo_Locked.car",
+    r"C:\CM_Projects\FS_LTS_2025_v1\Data\Vehicle\Baseline_Vehicles\Aero_Turbo_Open.car",
+    r"C:\CM_Projects\FS_LTS_2025_v1\Data\Vehicle\Baseline_Vehicles\Aero_Turbo_Torsen.car",
+    r"C:\CM_Projects\FS_LTS_2025_v1\Data\Vehicle\Baseline_Vehicles\Naero_1EM_Locked.car",
+    r"C:\CM_Projects\FS_LTS_2025_v1\Data\Vehicle\Baseline_Vehicles\Naero_1EM_Open.car",
+    r"C:\CM_Projects\FS_LTS_2025_v1\Data\Vehicle\Baseline_Vehicles\Naero_1EM_Torsen.car",
+    r"C:\CM_Projects\FS_LTS_2025_v1\Data\Vehicle\Baseline_Vehicles\Naero_4EM.car",
+    r"C:\CM_Projects\FS_LTS_2025_v1\Data\Vehicle\Baseline_Vehicles\Naero_NA_Locked.car",
+    r"C:\CM_Projects\FS_LTS_2025_v1\Data\Vehicle\Baseline_Vehicles\Naero_NA_open.car",
+    r"C:\CM_Projects\FS_LTS_2025_v1\Data\Vehicle\Baseline_Vehicles\Naero_NA_torsen.car",
+    r"C:\CM_Projects\FS_LTS_2025_v1\Data\Vehicle\Baseline_Vehicles\Naero_Turbo_Locked.car",
+    r"C:\CM_Projects\FS_LTS_2025_v1\Data\Vehicle\Baseline_Vehicles\Naero_Turbo_Open.car",
+    r"C:\CM_Projects\FS_LTS_2025_v1\Data\Vehicle\Baseline_Vehicles\Naero_Turbo_Torsen.car",
+]
+
 # ==========================================
-# --- 2. CSV Logging Class ---
+# --- 2. Menu Selection System ---
+# ==========================================
+def select_vehicle():
+    print("\n" + "="*50)
+    print(" BASELINE VEHICLE SELECTION")
+    print("="*50)
+    
+    for i, path in enumerate(BASELINE_VEHICLES):
+        car_name = os.path.basename(path)
+        print(f" {i+1:2d} - {car_name}")
+        
+    print("="*50)
+    
+    while True:
+        try:
+            choice = int(input("\nEnter the number of the vehicle to test (1-20): "))
+            if 1 <= choice <= len(BASELINE_VEHICLES):
+                selected_path = BASELINE_VEHICLES[choice-1]
+                car_name = os.path.basename(selected_path).replace('.car', '')
+                print(f"\n[+] Selected: {car_name}")
+                
+                input("\n[!] IMPORTANT: Make sure you have saved the TestRun in CarMaker GUI with this vehicle and run a Race Driver Adaptation! Press ENTER to continue...")
+                return selected_path, car_name
+            else:
+                print("Invalid selection. Please enter a number between 1 and 20.")
+        except ValueError:
+            print("Please enter a valid number.")
+
+# ==========================================
+# --- 3. CSV Logging Class ---
 # ==========================================
 class CSVLogger:
-    def __init__(self, project_dir):
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.filename = os.path.join(project_dir, f"Optimization_2D_{timestamp}.csv")
+    def __init__(self, script_dir, vehicle_name):
+        # 1. Generate the datestamped folder name (e.g., Results_2026-02-26)
+        date_stamp = datetime.now().strftime("%Y-%m-%d")
+        self.log_folder = os.path.join(script_dir, f"Results_{date_stamp}")
         
-        # Headers upgraded for 2 variables
+        # 2. Create the directory safely
+        os.makedirs(self.log_folder, exist_ok=True)
+        
+        # 3. Create the timestamped file name
+        time_stamp = datetime.now().strftime("%H%M%S")
+        self.filename = os.path.join(self.log_folder, f"Optimization_{vehicle_name}_{time_stamp}.csv")
+        
         self.headers = ["Front Spring [N/m]", "Rear Spring [N/m]", "Raw Lap Time [s]", "Cones Hit", "Total Time [s]"]
         with open(self.filename, mode='w', newline='') as f:
             writer = csv.writer(f)
             writer.writerow(self.headers)
+        
+        print(f"\n[LOG] Created directory: {self.log_folder}")
         print(f"[LOG] Results will be saved to: {self.filename}")
 
     def log_run(self, front_k, rear_k, raw_time, cones, total_time):
@@ -41,10 +105,9 @@ class CSVLogger:
             writer.writerow([front_k, rear_k, raw_time, cones, total_time])
 
 # ==========================================
-# --- 3. Helper Functions ---
+# --- 4. Helper Functions ---
 # ==========================================
 def modify_vehicle_parameters(file_path, params_dict):
-    """Upgraded to handle a dictionary of multiple parameters at once."""
     with open(file_path, 'r') as file:
         file_data = file.read()
 
@@ -85,10 +148,11 @@ def extract_lap_data(file_path):
         return 999.0, 0, 999.0
 
 # ==========================================
-# --- 4. The XIL API Bridge ---
+# --- 5. The XIL API Bridge ---
 # ==========================================
 class CarMakerXILBridge:
     def __init__(self):
+        # We save the original dir so we can return if needed, but chdir to PROJECT_DIR is required for CarMaker
         os.chdir(PROJECT_DIR)
         self.config_file = os.path.join(PROJECT_DIR, "Config.xml")
         self._create_config_xml()
@@ -125,17 +189,15 @@ class CarMakerXILBridge:
             self.ma_port.Dispose()
 
 # ==========================================
-# --- 5. The Objective Function ---
+# --- 6. The Objective Function ---
 # ==========================================
-def evaluate_lap_time(x, api, logger):
-    """x is now an array: x[0] = Front Spring, x[1] = Rear Spring"""
+def evaluate_lap_time(x, api, logger, vehicle_file):
     front_k = x[0]
     rear_k = x[1]
     
     print(f"--- Testing Setup | Front: {front_k:.1f} N/m | Rear: {rear_k:.1f} N/m ---")
     
-    # Update both parameters simultaneously
-    modify_vehicle_parameters(VEHICLE_FILE, {
+    modify_vehicle_parameters(vehicle_file, {
         "SuspF.Spring": front_k,
         "SuspR.Spring": rear_k
     })
@@ -145,33 +207,32 @@ def evaluate_lap_time(x, api, logger):
     log_file = get_latest_results_file()
     raw_time, cones, total_time = extract_lap_data(log_file)
     
-    # LOG TO CSV
     logger.log_run(round(front_k, 1), round(rear_k, 1), raw_time, cones, total_time)
     
     print(f"--> Result: {total_time:.3f} s (Raw: {raw_time}s | Cones: {cones})\n")
     return total_time
 
 # ==========================================
-# --- 6. Main Optimization Loop ---
+# --- 7. Main Optimization Loop ---
 # ==========================================
 if __name__ == "__main__":
+    VEHICLE_FILE, VEHICLE_NAME = select_vehicle()
+    
     print("Starting 2D CarMaker XIL Optimization Pipeline...")
     
     api = CarMakerXILBridge()
-    logger = CSVLogger(PROJECT_DIR)
     
-    # 1. Initial Guess (Where the optimizer starts looking)
-    initial_guess = [40000.0, 40000.0] 
+    # Pass the script's original directory to the logger
+    logger = CSVLogger(SCRIPT_DIR, VEHICLE_NAME)
     
-    # 2. Safety Bounds ((Front Min, Front Max), (Rear Min, Rear Max))
+    initial_guess = [33110.0, 32990.0] 
     bounds = ((20000.0, 80000.0), (20000.0, 80000.0))
     
     try:
-        # Run the multi-variable optimizer using the Powell method
         result = minimize(
             evaluate_lap_time, 
             initial_guess,
-            args=(api, logger), 
+            args=(api, logger, VEHICLE_FILE), 
             method='Powell',
             bounds=bounds,
             options={'xtol': 500.0, 'disp': True} 
@@ -179,6 +240,7 @@ if __name__ == "__main__":
         
         print("\n=========================================")
         print("OPTIMIZATION COMPLETE!")
+        print(f"Vehicle Tested: {VEHICLE_NAME}")
         print(f"Fastest Front Spring: {result.x[0]:.1f} N/m")
         print(f"Fastest Rear Spring:  {result.x[1]:.1f} N/m")
         print(f"Best Sprint Lap Time: {result.fun:.3f} s")
