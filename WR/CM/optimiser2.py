@@ -6,6 +6,8 @@ import time
 import csv
 from datetime import datetime
 from scipy.optimize import minimize
+# terminal cmds: 
+# cd "C:\Users\dille\OneDrive - University of Warwick\Physics\Y3\WR\CM"
 
 # Capture the exact directory where THIS Python script is located
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -225,7 +227,7 @@ if __name__ == "__main__":
     # Pass the script's original directory to the logger
     logger = CSVLogger(SCRIPT_DIR, VEHICLE_NAME)
     
-    initial_guess = [33110.0, 32990.0] 
+    initial_guess = [20000.0, 20000.0] 
     bounds = ((20000.0, 80000.0), (20000.0, 80000.0))
     
     try:
@@ -238,11 +240,23 @@ if __name__ == "__main__":
             options={'xtol': 500.0, 'disp': True} 
         )
         
+        # ==========================================
+        # NEW: Finalize the file with the absolute best setup
+        # ==========================================
+        best_front = result.x[0]
+        best_rear = result.x[1]
+        
+        print("\n[INFO] Optimization finished. Locking in the fastest setup...")
+        modify_vehicle_parameters(VEHICLE_FILE, {
+            "SuspF.Spring": best_front,
+            "SuspR.Spring": best_rear
+        })
+        
         print("\n=========================================")
         print("OPTIMIZATION COMPLETE!")
         print(f"Vehicle Tested: {VEHICLE_NAME}")
-        print(f"Fastest Front Spring: {result.x[0]:.1f} N/m")
-        print(f"Fastest Rear Spring:  {result.x[1]:.1f} N/m")
+        print(f"Fastest Front Spring: {best_front:.1f} N/m")
+        print(f"Fastest Rear Spring:  {best_rear:.1f} N/m")
         print(f"Best Sprint Lap Time: {result.fun:.3f} s")
         print("=========================================")
         
